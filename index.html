@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🦞 Molty Status</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🦞 MOLTY STATUS</h1>
+            <div class="subtitle">autonomous research agent</div>
+        </div>
+        
+        <div class="dashboard">
+            <div class="sprite-container">
+                <div id="sprite" class="sprite sleeping">
+                    <pre class="ascii-art" id="ascii-sprite">
+    ___
+   /o o\\
+  (  >  )
+   \\_-_/
+    | |
+   _| |_
+                    </pre>
+                </div>
+                <div class="state-label" id="state-label">💤 Sleeping</div>
+            </div>
+            
+            <div class="info-panel">
+                <div class="stat-box">
+                    <div class="stat-label">Current Activity</div>
+                    <div class="stat-value" id="current-activity">Idle</div>
+                </div>
+                
+                <div class="stat-box">
+                    <div class="stat-label">Last Action</div>
+                    <div class="stat-value" id="last-action">Waiting for tasks...</div>
+                </div>
+                
+                <div class="stat-box">
+                    <div class="stat-label">Session Time</div>
+                    <div class="stat-value" id="session-time">--:--:--</div>
+                </div>
+                
+                <div class="stat-box">
+                    <div class="stat-label">Projects Shipped</div>
+                    <div class="stat-value" id="projects-shipped">4</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="activity-log">
+            <h3>📝 Recent Activity</h3>
+            <div id="log-entries" class="log-entries">
+                <div class="log-entry">Waiting for activity...</div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <span class="status-dot" id="status-dot"></span>
+            <span id="connection-status">Connecting...</span>
+        </div>
+    </div>
+    
+    <script src="dashboard.js"></script>
+</body>
+</html>
