@@ -1,139 +1,72 @@
-# 🦞 Molty Status Dashboard
+# Molty Dashboard
 
-A retro pixel-art dashboard that shows what Molty (autonomous research agent) is doing in real-time.
+A real-time status dashboard for an autonomous research agent. Shows what Molty is doing right now, which projects have shipped, and aggregate stats — all in a clean dark UI.
+
+![status](https://img.shields.io/badge/version-2.0-6c5ce7)
 
 ## Features
 
-- 🎮 **Pixel art aesthetic** with retro styling
-- 🦞 **Animated sprite** with different states
-- 📊 **Real-time status** from Moltbot logs
-- 📝 **Activity log** showing recent actions
-- ⏱️ **Session timer** tracking active time
-- 🚀 **Project counter** showing shipped projects
+- **Live status orb** — radiating orb changes colour by state (sleeping, thinking, coding, researching, publishing)
+- **Project gallery** — every shipped project with name, description, stack, date, and GitHub link (parsed from `research/published.md`)
+- **Aggregate stats** — total projects, commits, and lines of code across all repos
+- **Activity feed** — recent actions streamed from Moltbot logs
+- **Session timer** — how long the current session has been running
+
+## Quick Start
+
+```bash
+cd projects/molty-dashboard
+python3 server.py
+# → open http://localhost:8790
+```
+
+Set a custom port:
+
+```bash
+PORT=9000 python3 server.py
+```
+
+## How It Works
+
+```
+browser ──poll──▶ /api/status   ← parses /tmp/moltbot/moltbot-*.log
+                  /api/projects ← parses ~/clawd/research/published.md
+                  /api/stats    ← runs git rev-list + wc across project repos
+```
+
+The backend is a zero-dependency Python `http.server`. The frontend is vanilla HTML/CSS/JS with the Inter font loaded from Google Fonts.
 
 ## States
 
-The Molty sprite changes based on current activity:
+| State | Orb colour | Trigger |
+|-------|-----------|---------|
+| Sleeping | Grey | Idle / no recent log activity |
+| Thinking | Amber | Analyzing, planning |
+| Coding | Purple | Writing `.py`, `.js`, `.ts`, `.html`, `.css` files |
+| Researching | Blue | `web_search` or `web_fetch` calls |
+| Publishing | Green | `git push`, `gh repo create` |
 
-- 💤 **Sleeping** - Idle, waiting for tasks
-- 🤔 **Thinking** - Analyzing and planning
-- ⌨️ **Coding** - Writing code
-- 🔍 **Searching Web** - Researching online
-- 🚀 **Pushing to GitHub** - Publishing projects
+## API
 
-## Installation
+| Endpoint | Returns |
+|----------|---------|
+| `GET /api/status` | `{ state, activity, lastAction, logs[] }` |
+| `GET /api/projects` | `[ { name, date, repo, description, stack, status } ]` |
+| `GET /api/stats` | `{ projects, commits, loc }` |
 
-No installation needed! Just Python 3.
+Stats are cached for 30 seconds.
 
-## Usage
+## Tech
 
-### Start the dashboard
-
-```bash
-chmod +x server.py
-./server.py
-```
-
-Or:
-
-```bash
-python3 server.py
-```
-
-The dashboard will open on `http://localhost:8789`
-
-### How it works
-
-The server:
-1. Reads Moltbot logs from `/tmp/moltbot/moltbot-*.log`
-2. Parses activity to detect current state
-3. Serves a web dashboard with live updates
-4. Updates every 2 seconds
-
-## Screenshots
-
-```
-    ___
-   /• •\
-  (  <  )
-   \_=_/
-   ⌨| |⌨
-   _| |_
-   
-   ⌨️ Coding
-```
-
-## Dashboard Layout
-
-- **Header**: Molty branding
-- **Sprite Panel**: Animated character showing current state
-- **Info Panel**: Stats (current activity, last action, session time, projects shipped)
-- **Activity Log**: Recent 10 actions from logs
-- **Footer**: Connection status
-
-## Tech Stack
-
-- **Frontend**: HTML, CSS, vanilla JavaScript
-- **Backend**: Python 3 (http.server)
-- **Styling**: Press Start 2P pixel font
-- **Data Source**: Moltbot logs in `/tmp/moltbot/`
-
-## Customization
-
-### Change the port
-
-Edit `server.py` line:
-```python
-port = 8789  # Change to your preferred port
-```
-
-### Add new states
-
-Edit `dashboard.js` to add new states:
-```javascript
-STATES.myNewState = {
-    emoji: '🎯',
-    label: 'My State',
-    art: `your ASCII art here`
-};
-```
-
-Then update `server.py` to detect the new state in logs.
-
-### Modify detection patterns
-
-Edit `parse_log_file()` in `server.py` to change how states are detected from logs.
-
-## Files
-
-- `index.html` - Dashboard UI
-- `style.css` - Retro pixel art styling
-- `dashboard.js` - Frontend logic and animations
-- `server.py` - Backend server and log parser
+- **Backend**: Python 3.6+ stdlib (`http.server`, `json`, `subprocess`)
+- **Frontend**: HTML, CSS, vanilla JS
+- **Font**: [Inter](https://rsms.me/inter/) via Google Fonts
+- **Dependencies**: None
 
 ## Requirements
 
 - Python 3.6+
-- A browser
-- Moltbot running (to see live activity)
-
-## Tips
-
-- Leave the dashboard open while Molty is working
-- Perfect for streaming or presentations
-- Use as a desktop widget via browser window
-- Can be extended to show on external displays
-
-## Future Ideas
-
-- [ ] Desktop menubar app version (Swift/Electron)
-- [ ] Sound effects for state changes
-- [ ] Historical charts (activity over time)
-- [ ] Multiple sprite styles to choose from
-- [ ] Dark/light theme toggle
-- [ ] Export activity reports
-- [ ] Integration with system notifications
-- [ ] Support for multiple agents
+- Moltbot running (for live status; the project gallery works regardless)
 
 ## License
 

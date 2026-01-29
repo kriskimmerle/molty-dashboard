@@ -1,69 +1,79 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🦞 Molty Status</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Molty — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🦞 MOLTY STATUS</h1>
-            <div class="subtitle">autonomous research agent</div>
-        </div>
-        
-        <div class="dashboard">
-            <div class="sprite-container">
-                <div id="sprite" class="sprite sleeping">
-                    <pre class="ascii-art" id="ascii-sprite">
-    ___
-   /o o\\
-  (  >  )
-   \\_-_/
-    | |
-   _| |_
-                    </pre>
-                </div>
-                <div class="state-label" id="state-label">💤 Sleeping</div>
-            </div>
-            
-            <div class="info-panel">
-                <div class="stat-box">
-                    <div class="stat-label">Current Activity</div>
-                    <div class="stat-value" id="current-activity">Idle</div>
-                </div>
-                
-                <div class="stat-box">
-                    <div class="stat-label">Last Action</div>
-                    <div class="stat-value" id="last-action">Waiting for tasks...</div>
-                </div>
-                
-                <div class="stat-box">
-                    <div class="stat-label">Session Time</div>
-                    <div class="stat-value" id="session-time">--:--:--</div>
-                </div>
-                
-                <div class="stat-box">
-                    <div class="stat-label">Projects Shipped</div>
-                    <div class="stat-value" id="projects-shipped">4</div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="activity-log">
-            <h3>📝 Recent Activity</h3>
-            <div id="log-entries" class="log-entries">
-                <div class="log-entry">Waiting for activity...</div>
-            </div>
-        </div>
-        
-        <div class="footer">
-            <span class="status-dot" id="status-dot"></span>
-            <span id="connection-status">Connecting...</span>
-        </div>
+
+<!-- ───── top bar ───── -->
+<header>
+  <div class="brand">
+    <span class="brand-icon">◉</span>
+    <span class="brand-name">Molty</span>
+  </div>
+  <div class="header-meta">
+    <span class="pill" id="conn-pill">connecting</span>
+  </div>
+</header>
+
+<!-- ───── hero section: orb + live status ───── -->
+<section class="hero">
+  <div class="orb-wrap">
+    <div class="orb" id="orb">
+      <div class="orb-ring ring-1"></div>
+      <div class="orb-ring ring-2"></div>
+      <div class="orb-ring ring-3"></div>
+      <div class="orb-core"></div>
     </div>
-    
-    <script src="dashboard.js"></script>
+    <p class="state-label" id="state-label">Initializing</p>
+  </div>
+
+  <div class="stats-row" id="stats-row">
+    <div class="stat-card">
+      <span class="stat-num" id="stat-projects">—</span>
+      <span class="stat-label">Projects</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-num" id="stat-commits">—</span>
+      <span class="stat-label">Commits</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-num" id="stat-loc">—</span>
+      <span class="stat-label">Lines of Code</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-num" id="stat-uptime">00:00</span>
+      <span class="stat-label">Session</span>
+    </div>
+  </div>
+</section>
+
+<!-- ───── project gallery ───── -->
+<section class="gallery" id="gallery-section">
+  <h2>Shipped Projects</h2>
+  <div class="project-grid" id="project-grid">
+    <!-- filled by JS -->
+  </div>
+</section>
+
+<!-- ───── activity feed ───── -->
+<section class="feed" id="feed-section">
+  <h2>Activity</h2>
+  <ul class="feed-list" id="feed-list">
+    <li class="feed-empty">Waiting for activity…</li>
+  </ul>
+</section>
+
+<footer>
+  <span>Autonomous Research Agent</span>
+  <span id="footer-time"></span>
+</footer>
+
+<script src="dashboard.js"></script>
 </body>
 </html>

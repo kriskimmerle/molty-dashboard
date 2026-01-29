@@ -1,206 +1,252 @@
 #!/usr/bin/env python3
 """
-Molty Status Dashboard Server
-Serves the dashboard and provides real-time status from Moltbot logs
+Molty Dashboard v2 — Server
+Serves the dashboard and provides real-time status + project data.
 """
 
 import json
 import os
 import re
+import subprocess
 import time
 from datetime import datetime
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
+
+CLAWD = Path.home() / "clawd"
+PUBLISHED_MD = CLAWD / "research" / "published.md"
+PROJECTS_DIR = CLAWD / "projects"
 
 
-class MoltyStatusHandler(SimpleHTTPRequestHandler):
-    """HTTP handler for the dashboard"""
-    
-    # Track last log position
-    last_log_position = 0
-    last_log_file = None
-    session_start = time.time()
-    
-    def do_GET(self):
-        """Handle GET requests"""
-        if self.path == '/api/status':
-            self.send_json_response(self.get_status())
-        else:
-            # Serve static files
-            super().do_GET()
-    
-    def send_json_response(self, data: Dict):
-        """Send JSON response"""
-        self.send_response(200)
-        self.send_header('Content-Type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.end_headers()
-        self.wfile.write(json.dumps(data).encode())
-    
-    def get_status(self) -> Dict:
-        """Get current Molty status"""
-        # Find latest log file
-        log_dir = Path('/tmp/moltbot')
-        
-        if not log_dir.exists():
-            return {
-                'state': 'sleeping',
-                'activity': 'No logs found',
-                'lastAction': 'Moltbot not running?',
-                'projectsShipped': self.count_shipped_projects(),
-                'newLogs': []
-            }
-        
-        # Find most recent log file
-        log_files = sorted(log_dir.glob('moltbot-*.log'))
-        if not log_files:
-            return {
-                'state': 'sleeping',
-                'activity': 'Idle',
-                'lastAction': 'No recent activity',
-                'projectsShipped': self.count_shipped_projects(),
-                'newLogs': []
-            }
-        
-        latest_log = log_files[-1]
-        
-        # Detect state from recent log activity
-        state, activity, last_action, new_logs = self.parse_log_file(latest_log)
-        
-        return {
-            'state': state,
-            'activity': activity,
-            'lastAction': last_action,
-            'projectsShipped': self.count_shipped_projects(),
-            'newLogs': new_logs
-        }
-    
-    def parse_log_file(self, log_file: Path) -> tuple:
-        """Parse log file to determine current state"""
+# ── Project parser ─────────────────────────────────────────────────────────
+
+def parse_published() -> List[Dict[str, Any]]:
+    """Parse research/published.md into structured project objects."""
+    if not PUBLISHED_MD.exists():
+        return []
+
+    text = PUBLISHED_MD.read_text()
+    # Split on level-2 headings that look like project entries
+    raw_sections = re.split(r"(?=^## \w)", text, flags=re.MULTILINE)
+
+    projects: List[Dict[str, Any]] = []
+    for sec in raw_sections:
+        sec = sec.strip()
+        if not sec.startswith("## "):
+            continue
+
+        header_match = re.match(r"^## (.+?)(?:\s*\((.+?)\))?\s*$", sec, re.MULTILINE)
+        if not header_match:
+            continue
+
+        name = header_match.group(1).strip()
+        date = header_match.group(2) or ""
+
+        repo = ""
+        m = re.search(r"\*\*Repo:\*\*\s*(https?://\S+)", sec)
+        if m:
+            repo = m.group(1).strip()
+
+        what = ""
+        m = re.search(r"\*\*What:\*\*\s*(.+?)(?:\n\n|\n\*\*)", sec, re.DOTALL)
+        if m:
+            what = m.group(1).strip()
+
+        stack = ""
+        m = re.search(r"\*\*Stack:\*\*\s*(.+)", sec)
+        if m:
+            stack = m.group(1).strip()
+
+        status = ""
+        m = re.search(r"\*\*Status:\*\*\s*(.+)", sec)
+        if m:
+            status = m.group(1).strip()
+
+        projects.append({
+            "name": name,
+            "date": date,
+            "repo": repo,
+            "description": what,
+            "stack": stack,
+            "status": status,
+        })
+
+    return projects
+
+
+def git_stats() -> Dict[str, int]:
+    """Aggregate commit count + rough LOC across project repos."""
+    total_commits = 0
+    total_loc = 0
+    if not PROJECTS_DIR.exists():
+        return {"commits": 0, "loc": 0}
+
+    for d in PROJECTS_DIR.iterdir():
+        if not d.is_dir() or not (d / ".git").exists():
+            continue
         try:
-            # Read new log entries
-            if self.last_log_file != str(log_file):
-                self.last_log_position = 0
-                self.last_log_file = str(log_file)
-            
-            with open(log_file) as f:
-                f.seek(self.last_log_position)
-                new_content = f.read()
-                self.last_log_position = f.tell()
-            
-            # Parse recent lines
-            recent_lines = new_content.strip().split('\n')[-50:] if new_content else []
-            
-            # Detect state based on log patterns
-            state = 'sleeping'
-            activity = 'Idle'
-            last_action = 'No recent activity'
-            new_logs = []
-            
-            # Check for activity patterns
-            for line in reversed(recent_lines):
-                if not line.strip():
-                    continue
-                
-                # Extract timestamp and message
-                match = re.search(r'\[(.*?)\].*?\s+(.*)', line)
-                if match:
-                    msg = match.group(2)
-                    
-                    # Detect state
-                    if 'web_search' in line.lower() or 'searching' in line.lower():
-                        state = 'searching'
-                        activity = 'Searching the web'
-                        last_action = msg[:100]
-                    elif 'exec' in line.lower() and 'git push' in line.lower():
-                        state = 'pushing'
-                        activity = 'Pushing to GitHub'
-                        last_action = 'Publishing project'
-                    elif 'exec' in line.lower() and ('gh repo create' in line.lower() or 'git commit' in line.lower()):
-                        state = 'pushing'
-                        activity = 'Committing code'
-                        last_action = msg[:100]
-                    elif 'write' in line.lower() and ('.py' in line.lower() or '.js' in line.lower() or '.html' in line.lower()):
-                        state = 'coding'
-                        activity = 'Writing code'
-                        last_action = msg[:100]
-                    elif 'thinking' in line.lower() or 'analyzing' in line.lower():
-                        state = 'thinking'
-                        activity = 'Thinking'
-                        last_action = msg[:100]
-                    elif last_action == 'No recent activity':
-                        last_action = msg[:100]
-                    
-                    # Add to new logs
-                    if len(new_logs) < 5:
-                        log_type = 'info'
-                        if 'error' in line.lower():
-                            log_type = 'error'
-                        elif 'success' in line.lower() or 'complete' in line.lower():
-                            log_type = 'success'
-                        elif 'warning' in line.lower():
-                            log_type = 'warning'
-                        
-                        new_logs.append({
-                            'message': msg[:200],
-                            'type': log_type
-                        })
-            
-            # Check if recently active (within last 30 seconds)
-            mod_time = os.path.getmtime(log_file)
-            age = time.time() - mod_time
-            
-            if age > 30 and state != 'sleeping':
-                state = 'sleeping'
-                activity = 'Idle (waiting for tasks)'
-            
-            return state, activity, last_action, new_logs
-            
-        except Exception as e:
-            print(f"Error parsing log: {e}")
-            return 'sleeping', 'Error reading logs', str(e), []
-    
-    def count_shipped_projects(self) -> int:
-        """Count shipped projects from published.md"""
-        try:
-            published_file = Path.home() / 'clawd' / 'research' / 'published.md'
-            if published_file.exists():
-                content = published_file.read_text()
-                # Count ## headers (each project has one)
-                count = len(re.findall(r'^## \w', content, re.MULTILINE))
-                return count
+            out = subprocess.check_output(
+                ["git", "rev-list", "--count", "HEAD"],
+                cwd=str(d), stderr=subprocess.DEVNULL, text=True,
+            )
+            total_commits += int(out.strip())
         except Exception:
             pass
-        return 4  # Default based on current count
-    
-    def log_message(self, format, *args):
-        """Suppress default logging"""
-        pass
+        # Rough LOC via wc
+        try:
+            out = subprocess.check_output(
+                "git ls-files | xargs wc -l 2>/dev/null | tail -1",
+                cwd=str(d), shell=True, stderr=subprocess.DEVNULL, text=True,
+            )
+            m = re.match(r"\s*(\d+)", out)
+            if m:
+                total_loc += int(m.group(1))
+        except Exception:
+            pass
+    return {"commits": total_commits, "loc": total_loc}
 
+
+# ── Handler ────────────────────────────────────────────────────────────────
+
+class DashboardHandler(SimpleHTTPRequestHandler):
+    last_log_pos = 0
+    last_log_file: Optional[str] = None
+    _stats_cache: Optional[Dict] = None
+    _stats_ts: float = 0
+
+    def do_GET(self):
+        if self.path == "/api/status":
+            return self._json(self._build_status())
+        if self.path == "/api/projects":
+            return self._json(parse_published())
+        if self.path == "/api/stats":
+            return self._json(self._cached_stats())
+        super().do_GET()
+
+    # ── helpers ──
+
+    def _json(self, data):
+        body = json.dumps(data).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _cached_stats(self) -> Dict:
+        now = time.time()
+        if DashboardHandler._stats_cache is None or now - DashboardHandler._stats_ts > 30:
+            DashboardHandler._stats_cache = git_stats()
+            DashboardHandler._stats_cache["projects"] = len(parse_published())
+            DashboardHandler._stats_ts = now
+        return DashboardHandler._stats_cache
+
+    # ── status / log parsing ──
+
+    def _build_status(self) -> Dict:
+        log_dir = Path("/tmp/moltbot")
+        if not log_dir.exists():
+            return self._idle("No logs found")
+
+        log_files = sorted(log_dir.glob("moltbot-*.log"))
+        if not log_files:
+            return self._idle("Idle")
+
+        return self._parse_log(log_files[-1])
+
+    def _idle(self, msg: str) -> Dict:
+        return {
+            "state": "sleeping",
+            "activity": msg,
+            "lastAction": "Waiting for tasks",
+            "logs": [],
+        }
+
+    def _parse_log(self, log_file: Path) -> Dict:
+        cls = DashboardHandler
+        if cls.last_log_file != str(log_file):
+            cls.last_log_pos = 0
+            cls.last_log_file = str(log_file)
+
+        try:
+            with open(log_file) as f:
+                f.seek(cls.last_log_pos)
+                chunk = f.read()
+                cls.last_log_pos = f.tell()
+        except Exception:
+            return self._idle("Error reading logs")
+
+        lines = [l for l in chunk.strip().split("\n") if l.strip()][-50:]
+
+        state = "sleeping"
+        activity = "Idle"
+        last_action = "No recent activity"
+        logs: List[Dict] = []
+
+        for line in reversed(lines):
+            m = re.search(r"\[(.*?)\].*?\s+(.*)", line)
+            if not m:
+                continue
+            msg = m.group(2)
+
+            low = line.lower()
+            if "web_search" in low or "web_fetch" in low:
+                state, activity = "searching", "Researching"
+            elif "git push" in low or "gh repo create" in low:
+                state, activity = "pushing", "Publishing"
+            elif "git commit" in low:
+                state, activity = "pushing", "Committing"
+            elif re.search(r"\.(py|js|ts|html|css|rs|go)\b", low) and ("write" in low or "edit" in low):
+                state, activity = "coding", "Writing code"
+            elif "thinking" in low or "analyzing" in low:
+                state, activity = "thinking", "Thinking"
+
+            if last_action == "No recent activity":
+                last_action = msg[:120]
+
+            if len(logs) < 8:
+                kind = "info"
+                if "error" in low:
+                    kind = "error"
+                elif "success" in low or "complete" in low or "shipped" in low:
+                    kind = "success"
+                logs.append({"message": msg[:200], "type": kind})
+
+        # Go idle if log hasn't been touched in 30s
+        try:
+            age = time.time() - os.path.getmtime(log_file)
+            if age > 30:
+                state, activity = "sleeping", "Idle"
+        except Exception:
+            pass
+
+        return {
+            "state": state,
+            "activity": activity,
+            "lastAction": last_action,
+            "logs": logs,
+        }
+
+    def log_message(self, fmt, *args):
+        pass  # silence
+
+
+# ── main ───────────────────────────────────────────────────────────────────
 
 def main():
-    """Start the dashboard server"""
-    port = 8789
-    
-    print("🦞 Molty Status Dashboard")
-    print("=" * 50)
-    print(f"Starting server on http://localhost:{port}")
-    print(f"Open in browser: http://localhost:{port}")
-    print("=" * 50)
-    print("Press Ctrl+C to stop\n")
-    
-    # Change to dashboard directory
+    port = int(os.environ.get("PORT", 8790))
     os.chdir(Path(__file__).parent)
-    
-    server = HTTPServer(('localhost', port), MoltyStatusHandler)
-    
+    print(f"\n  Molty Dashboard v2")
+    print(f"  http://localhost:{port}\n")
+    server = HTTPServer(("localhost", port), DashboardHandler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n\n👋 Shutting down dashboard...")
+        print("\nShutting down.")
         server.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
