@@ -12,6 +12,15 @@ A real-time status dashboard for an autonomous research agent. Shows what Molty 
 - **Activity feed** — recent actions streamed from Moltbot logs
 - **Session timer** — how long the current session has been running
 
+## Installation
+
+```bash
+git clone https://github.com/kriskimmerle/molty-dashboard.git
+cd molty-dashboard
+```
+
+No dependencies — pure Python stdlib backend + vanilla JS frontend.
+
 ## Quick Start
 
 ```bash
